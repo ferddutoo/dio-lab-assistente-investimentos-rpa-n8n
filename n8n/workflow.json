@@ -1,0 +1,386 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [-256, -96],
+      "id": "3f326063-a9c6-42f5-8ea3-441307832cea",
+      "name": "Gatilho de início: Python -> N8N",
+      "webhookId": "3a1ea2a6-5067-4443-8a33-f14907ac85bc"
+    },
+    {
+      "parameters": {
+        "url": "https://digitalinnovationone.github.io/dio-lab-assistente-investimentos-rpa-n8n/data.csv",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [-32, -16],
+      "id": "c1a9e402-e0ea-4d84-98d7-c0c38b679db6",
+      "name": "Obtem o CSV com os perfis: Output file"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1600, -288],
+      "id": "0b15dbcf-f1a3-4b5d-9e4c-f89e73863297",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [640, -96],
+      "id": "701c9841-a3e4-417d-84a8-7a65867dca1b",
+      "name": "Junta fontes",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "investimentos",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [416, -16],
+      "id": "3ae376bc-0ab5-4c7e-b5e3-5e3ced7f0165",
+      "name": "Agrega investimentos para um item"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [192, -16],
+      "id": "b6e346d6-455f-4f6c-9a1f-4141e1359b7c",
+      "name": "Extrair de arquivo: Alternativa No-code",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.all();\n\nlet clientes = [];\nlet produtos = [];\n\ninputData.forEach(item => {\n  const json = item.json || {};\n\n  // 1. Pega os clientes de dentro de body.clientes\n  if (json.body && Array.isArray(json.body.clientes)) {\n    clientes = json.body.clientes;\n  }\n  // Fallback caso venham direto na raiz\n  else if (json.clientes && Array.isArray(json.clientes)) {\n    clientes = json.clientes;\n  }\n\n  // 2. Pega os investimentos que estão na raiz\n  if (json.investimentos && Array.isArray(json.investimentos)) {\n    produtos = json.investimentos;\n  }\n});\n\n// Função para converter o saldo monetário (\"R$ 12.500,00\") em número (12500.00)\nfunction parseSaldo(saldoStr) {\n  if (!saldoStr) return 0;\n  if (typeof saldoStr === 'number') return saldoStr;\n  const limpo = String(saldoStr)\n    .replace('R$', '')\n    .replace(/\\./g, '')\n    .replace(',', '.')\n    .trim();\n  return parseFloat(limpo) || 0;\n}\n\n// Cruzamento dos 10 clientes com os produtos\nconst resultados = clientes.map(cliente => {\n  const saldoNumerico = parseSaldo(cliente.saldo);\n  const perfilCliente = (cliente.perfil || '').trim().toLowerCase();\n\n  const produtosElegiveis = produtos.filter(prod => {\n    const minimoNumerico = parseFloat(prod.minimo) || 0;\n    const perfilProd = (prod.perfil || '').trim().toLowerCase();\n\n    return perfilProd === perfilCliente && saldoNumerico >= minimoNumerico;\n  });\n\n  const mensagensPropaganda = produtosElegiveis.map(prod => {\n    return `Olá ${cliente.nome}, temos uma oportunidade perfeita para seu perfil (${cliente.perfil})! Invista em ${prod.produto} com rentabilidade de ${prod.rentabilidade} a partir de R$ ${prod.minimo}.`;\n  });\n\n  // Escolhe aleatoriamente uma mensagem da lista (se houver mensagens disponíveis)\n  let mensagemAleatoria = null;\n  let produtoEscolhido = null;\n\n  if (mensagensPropaganda.length > 0) {\n    const indiceAleatorio = Math.floor(Math.random() * mensagensPropaganda.length);\n    mensagemAleatoria = mensagensPropaganda[indiceAleatorio];\n    produtoEscolhido = produtosElegiveis[indiceAleatorio];\n  }\n\n  return {\n    json: {\n      cliente: cliente.nome,\n      email: cliente.email,\n      saldo: cliente.saldo,\n      perfil: cliente.perfil,\n      produtosElegiveis: produtosElegiveis,\n      mensagens: mensagensPropaganda,\n      produtoSorteado: produtoEscolhido,\n      mensagemSelecionada: mensagemAleatoria // <--- A única mensagem escolhida aleatoriamente para este cliente\n    }\n  };\n});\n\nreturn resultados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [864, -96],
+      "id": "2ff8ced7-d078-422f-bd54-51add4a3b6fd",
+      "name": "Cria modelos de mensagens e seleciona viável",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [1312, -96],
+      "id": "c4bc3c65-d484-4031-9a27-f5d0a4c75d71",
+      "name": "Laço de repetição de clientes",
+      "retryOnFail": false,
+      "executeOnce": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-5-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "={{ $json.promptIA }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [1536, -96],
+      "id": "f45575f2-165c-42bd-81e2-ef316c4da13a",
+      "name": "Prepara conteúdo para envio",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.all();\n\nconst resultadosNormalizados = inputData.map((item, index) => {\n  let rawText = '';\n\n  try {\n    // 1. Extrai o texto cru exatamente do caminho que a IA devolve na estrutura do n8n\n    rawText = item.json.output[0].content[0].text;\n  } catch (err) {\n    // Fallback caso venha em outro formato de texto\n    rawText = item.json.text || (item.json.message && item.json.message.content) || JSON.stringify(item.json);\n  }\n\n  let dadosIa = {};\n  \n  try {\n    // Limpa blocos de marcação markdown se houver e converte a string JSON em objeto\n    const jsonLimpo = rawText\n      .replace(/```json/g, '')\n      .replace(/```/g, '')\n      .trim();\n    \n    dadosIa = JSON.parse(jsonLimpo);\n  } catch (e) {\n    dadosIa = {\n      assunto: \"Oportunidade de Investimento Personalizada\",\n      corpoEmailHtml: rawText,\n      produtoDivulgado: \"Investimento\"\n    };\n  }\n\n  // 2. Resgata os dados do cliente diretamente do nó Loop Over Items correspondente à execução atual\n  let emailCliente = \"\";\n  let nomeCliente = \"\";\n  let produtoSorteado = {};\n\n  try {\n    const loopItem = $('Laço de repetição de clientes').all()[index] || $('Laço de repetição de clientes').first();\n    if (loopItem && loopItem.json) {\n      emailCliente = loopItem.json.emailCliente || loopItem.json.email || \"\";\n      nomeCliente = loopItem.json.nomeCliente || loopItem.json.cliente || \"\";\n      produtoSorteado = loopItem.json.produtoSorteadoParaEnvio || {};\n    }\n  } catch (e) {\n    // Caso o contexto do Loop não seja mapeado por índice, tenta pegar direto do item atual ou fallback\n    emailCliente = item.json.emailCliente || \"\";\n    nomeCliente = item.json.nomeCliente || \"\";\n    produtoSorteado = item.json.produtoSorteadoParaEnvio || {};\n  }\n\n  // Retorna o payload limpo e normalizado pronto para o envio do e-mail\n  return {\n    json: {\n      emailDestino: emailCliente,\n      nomeCliente: nomeCliente,\n      assunto: dadosIa.assunto || \"Oportunidade de Investimento\",\n      corpoHtml: dadosIa.corpoEmailHtml || \"\",\n      produtoDivulgado: dadosIa.produtoDivulgado || produtoSorteado.produto || \"Investimento\",\n      detalhesProduto: produtoSorteado\n    }\n  };\n});\n\nreturn resultadosNormalizados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1888, -96],
+      "id": "f9b19e44-39b6-439e-8f08-04d95ef377a1",
+      "name": "Normaliza saída LLM",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.all();\n\nlet clientes = [];\nlet produtos = [];\n\ninputData.forEach(item => {\n  const json = item.json || {};\n\n  // 1. Captura clientes se vierem avulsos (linha a linha)\n  if (json.cliente && json.email) {\n    if (!clientes.some(c => c.email === json.email)) {\n      clientes.push({\n        nome: json.cliente,\n        email: json.email,\n        saldo: json.saldo,\n        perfil: json.perfil\n      });\n    }\n  }\n  // Se vierem na estrutura tradicional de body.clientes\n  if (json.body && Array.isArray(json.body.clientes)) {\n    json.body.clientes.forEach(c => {\n      if (!clientes.some(existing => existing.email === c.email)) clientes.push(c);\n    });\n  }\n  if (json.clientes && Array.isArray(json.clientes)) {\n    json.clientes.forEach(c => {\n      if (!clientes.some(existing => existing.email === c.email)) clientes.push(c);\n    });\n  }\n\n  // Se os produtos elegíveis já vierem prontos do passo anterior, aproveita eles\n  if (json.produtosElegiveis && Array.isArray(json.produtosElegiveis)) {\n    json.produtosElegiveis.forEach(p => {\n      if (!produtos.some(prod => prod.produto === p.produto && prod.perfil === p.perfil)) {\n        produtos.push(p);\n      }\n    });\n  }\n\n  // 2. Captura investimentos da raiz (vindo exclusivamente do CSV/Aggregate real)\n  if (json.investimentos && Array.isArray(json.investimentos)) {\n    json.investimentos.forEach(inv => {\n      const p = inv.json ? inv.json : inv;\n      if (p.produto && !produtos.some(prod => prod.produto === p.produto && prod.perfil === p.perfil)) {\n        produtos.push(p);\n      }\n    });\n  }\n});\n\n// Função para converter o saldo monetário (\"R$ 12.500,00\") em número (12500.00)\nfunction parseSaldo(saldoStr) {\n  if (!saldoStr) return 0;\n  if (typeof saldoStr === 'number') return saldoStr;\n  const limpo = String(saldoStr)\n    .replace('R$', '')\n    .replace(/\\./g, '')\n    .replace(',', '.')\n    .trim();\n  return parseFloat(limpo) || 0;\n}\n\n// Cruzamento e normalização estritamente com os dados reais\nconst resultados = clientes.map(cliente => {\n  const saldoNumerico = parseSaldo(cliente.saldo);\n  const perfilCliente = (cliente.perfil || '').trim().toLowerCase();\n\n  // Filtra apenas os produtos elegíveis reais\n  const produtosElegiveis = produtos.filter(prod => {\n    const minimoNumerico = parseFloat(prod.minimo) || 0;\n    const perfilProd = (prod.perfil || '').trim().toLowerCase();\n\n    return perfilProd === perfilCliente && saldoNumerico >= minimoNumerico;\n  });\n\n  // Sorteia aleatoriamente um produto elegível real\n  let produtoSorteado = null;\n  let mensagemBaseSorteada = null;\n\n  if (produtosElegiveis.length > 0) {\n    const indiceAleatorio = Math.floor(Math.random() * produtosElegiveis.length);\n    produtoSorteado = produtosElegiveis[indiceAleatorio];\n    \n    // Cria a mensagem base padronizada com os dados reais para servir de input criativo para a IA\n    mensagemBaseSorteada = `Olá ${cliente.nome}, temos uma oportunidade perfeita para seu perfil (${cliente.perfil})! Invista em ${produtoSorteado.produto} com rentabilidade de ${produtoSorteado.rentabilidade} a partir de R$ ${produtoSorteado.minimo}.`;\n  }\n\n  // Prompt estruturado instruindo a IA a devolver a mensagem em formato HTML otimizado para e-mail\n  const promptSistemaIA = `Atue como um assessor de investimentos sênior. Sua tarefa é reescrever e enriquecer a \"Mensagem Base de Referência\" abaixo de forma muito mais criativa, mantendo rigorosamente uma linguagem formal, altamente persuasiva, sem promessas de ganhos certos ou garantidos e sem erros ortográficos.\nO campo \"corpoEmailHtml\" DEVE conter o texto formatado em HTML limpo (utilizando tags como <p>, <br>, <strong>) adequado para envio direto no corpo de um e-mail profissional.\n\nSua resposta DEVE SER EXCLUSIVAMENTE um objeto JSON válido, contendo exatamente a estrutura abaixo:\n{\n  \"assunto\": \"Assunto formal e chamativo para o e-mail\",\n  \"corpoEmailHtml\": \"<p>Prezado(a) ...</p><p>...</p>\",\n  \"produtoDivulgado\": \"${produtoSorteado ? produtoSorteado.produto : 'Nenhum'}\"\n}\n\nDados reais de referência para a criação:\n- Nome: ${cliente.nome}\n- Perfil de Risco: ${cliente.perfil}\n- Saldo Disponível: ${cliente.saldo}\n- Mensagem Base de Referência: \"${mensagemBaseSorteada || 'N/A'}\"`;\n\n  return {\n    json: {\n      nomeCliente: cliente.nome,\n      emailCliente: cliente.email,\n      perfilCliente: cliente.perfil,\n      saldoCliente: cliente.saldo,\n      produtoSorteadoParaEnvio: {\n        ...produtoSorteado,\n        mensagemBase: mensagemBaseSorteada\n      },\n      promptIA: promptSistemaIA\n    }\n  };\n});\n\nreturn resultados;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1088, -96],
+      "id": "85e7d894-d695-4af0-a46d-5f8bf971de07",
+      "name": "Normaliza para chamada a LLM"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.emailDestino }}",
+        "subject": "={{ $json.assunto }}",
+        "message": "={{ $json.corpoHtml }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [2112, -96],
+      "id": "5b90f6ef-2c21-49b1-a003-a416d40ec4a1",
+      "name": "Envia uma mensagem",
+      "webhookId": "511037f9-7b50-472f-a1bd-34bfc5610539",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "I12tXaBB5xj9R8YE",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2336, -16],
+      "id": "0799c441-81bf-445a-be4b-4da1f6515bf9",
+      "name": "Pausa no Laço",
+      "webhookId": "56add71e-41eb-4e46-88e2-2aa19331e94c"
+    },
+    {
+      "parameters": {
+        "sendTo": "ferdxavier@gmail.com",
+        "subject": "Notificação de fim de fluxo N8N",
+        "message": "<!DOCTYPE html> <html lang=\"pt-BR\"> <head>     <meta charset=\"UTF-8\">     <title>Execução Concluída - Envio de Propostas</title> </head> <body style=\"font-family: Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 20px;\">     <div style=\"max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);\">         <h2 style=\"color: #1a365d; margin-top: 0;\">Relatório de Conclusão do Fluxo</h2>         <p style=\"color: #4a5568; line-height: 1.5;\">             O fluxo de automação para envio personalizado de <strong>Propostas de Investimento</strong> foi concluído com sucesso.         </p>                  <div style=\"background-color: #ebf8ff; border-left: 4px solid #3182ce; padding: 15px; margin: 20px 0; border-radius: 4px;\">             <p style=\"margin: 0; color: #2b6cb0; font-weight: bold;\">Status da Operação:</p>             <p style=\"margin: 5px 0 0 0; color: #2d3748;\">                 Todas as propostas foram geradas com base no perfil de risco e saldo dos clientes e encaminhadas aos respetivos e-mails.             </p>         </div>          <p style=\"color: #718096; font-size: 13px; margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px;\">             Esta é uma mensagem automática gerada pelo sistema de automação do n8n.         </p>     </div> </body> </html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [1888, -288],
+      "id": "82fcb3ad-c4e8-47e1-b11f-c518c90d9d34",
+      "name": "Send a message",
+      "webhookId": "fe0e2807-e5e1-4850-b800-5cdcd6459c9d",
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "I12tXaBB5xj9R8YE",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gatilho de início: Python -> N8N": {
+      "main": [
+        [
+          {
+            "node": "Obtem o CSV com os perfis: Output file",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Junta fontes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtem o CSV com os perfis: Output file": {
+      "main": [
+        [
+          {
+            "node": "Extrair de arquivo: Alternativa No-code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Junta fontes": {
+      "main": [
+        [
+          {
+            "node": "Cria modelos de mensagens e seleciona viável",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agrega investimentos para um item": {
+      "main": [
+        [
+          {
+            "node": "Junta fontes",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extrair de arquivo: Alternativa No-code": {
+      "main": [
+        [
+          {
+            "node": "Agrega investimentos para um item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cria modelos de mensagens e seleciona viável": {
+      "main": [
+        [
+          {
+            "node": "Normaliza para chamada a LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Laço de repetição de clientes": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepara conteúdo para envio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara conteúdo para envio": {
+      "main": [
+        [
+          {
+            "node": "Normaliza saída LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliza saída LLM": {
+      "main": [
+        [
+          {
+            "node": "Envia uma mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normaliza para chamada a LLM": {
+      "main": [
+        [
+          {
+            "node": "Laço de repetição de clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envia uma mensagem": {
+      "main": [
+        [
+          {
+            "node": "Pausa no Laço",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pausa no Laço": {
+      "main": [
+        [
+          {
+            "node": "Laço de repetição de clientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2e9ccaf5-4120-4a1b-a70b-640349197f92",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a8f93b7fc2b650cf1b9443fa8fbf04f97548f77cab144bdf10ee32f15848bb29"
+  },
+  "nodeGroups": [],
+  "id": "p8JQYld98ORUYO2g",
+  "tags": []
+}
